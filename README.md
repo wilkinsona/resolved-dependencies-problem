@@ -10,23 +10,22 @@ When run on Gradle 8.0.1 using `--configuration-cache`, information about depend
 The `build.gradle` file in the root of this repository contains a simplified and reduced approximation of the code in Spring Boot.
 It should reproduce the behavior described above.
 
-First, run `./gradlew reproducer` and the build should pass:
+First, run `./gradlew customWar` and the build should pass:
 
 ```
-$ ./gradlew reproducer
+$ ./gradlew customWar
 
 BUILD SUCCESSFUL in 929ms
 4 actionable tasks: 4 executed
-
 ```
 
-Then run `./gradlew clean reproducer --configuration-cache` and the build should fail:
+Then run `./gradlew clean customWar --configuration-cache` and the build should fail:
 
 ```
-./gradlew clean reproducer --configuration-cache
+$ ./gradlew clean customWar --configuration-cache
 Configuration cache is an incubating feature.
 Reusing configuration cache.
-> Task :reproducer FAILED
+> Task :customWar FAILED
 
 FAILURE: Build failed with an exception.
 
@@ -34,7 +33,7 @@ FAILURE: Build failed with an exception.
 Build file '[…]/resolved-dependencies-problem/build.gradle' line: 22
 
 * What went wrong:
-Execution failed for task ':reproducer'.
+Execution failed for task ':customWar'.
 > Could not find […]/resolved-dependencies-problem/three/build/libs/three.jar
 
 * Try:
@@ -50,6 +49,36 @@ Configuration cache entry reused.
 ```
 
 We have [very similar code in Spring Boot for jar archives][3] and it's not affected by the problem.
+This reproduction also demonstrates this behavior:
+
+```
+$ ./gradlew customJar
+
+BUILD SUCCESSFUL in 1s
+4 actionable tasks: 4 executed
+```
+
+```
+$ ./gradlew clean customJar --configuration-cache
+Configuration cache is an incubating feature.
+Calculating task graph as no configuration cache is available for tasks: clean customJar
+
+BUILD SUCCESSFUL in 708ms
+8 actionable tasks: 8 executed
+Configuration cache entry stored.
+```
+
+It continues to work when a configuration cache entry is available for re-use:
+
+```
+$ ./gradlew clean customJar --configuration-cache
+Configuration cache is an incubating feature.
+Reusing configuration cache.
+
+BUILD SUCCESSFUL in 637ms
+8 actionable tasks: 8 executed
+Configuration cache entry reused.
+```
 
 
 [1]: https://github.com/spring-projects/spring-boot/blob/2.7.x/spring-boot-project/spring-boot-tools/spring-boot-gradle-plugin/src/main/java/org/springframework/boot/gradle/tasks/bundling/ResolvedDependencies.java

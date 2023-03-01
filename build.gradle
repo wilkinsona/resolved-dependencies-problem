@@ -1,8 +1,8 @@
-class Reproducer extends War {
+class CustomWar extends War {
 
 	private List<ResolvedConfigurationDependencies> resolvedConfigurationDependencies = new ArrayList<>()
 
-	Reproducer() {
+	CustomWar() {
 		Project project = getProject()
 		project.getConfigurations().all { configuration ->
 			ResolvableDependencies incoming = configuration.incoming
@@ -13,6 +13,60 @@ class Reproducer extends War {
 				}
 			}
 		}
+	}
+
+	@TaskAction
+	void reproduce() {
+		for (File file: classpath.files) {
+			if (file.isFile() && !find(file)) {
+				throw new GradleException("Could not find " + file)
+			}
+		}
+	}
+
+	String find(def file) {
+		for (def dependencies : resolvedConfigurationDependencies) {
+			def found = dependencies.find(file)
+			if (found) {
+				return found
+			}
+		}
+		return null
+	}
+
+	@Internal
+	List<ResolvedConfigurationDependencies> getResolvedConfigurationDependencies() {
+		return this.resolvedConfigurationDependencies
+	}
+
+}
+
+class CustomJar extends Jar {
+
+	private List<ResolvedConfigurationDependencies> resolvedConfigurationDependencies = new ArrayList<>()
+
+	private FileCollection classpath;
+
+	CustomJar() {
+		Project project = getProject()
+		project.getConfigurations().all { configuration ->
+			ResolvableDependencies incoming = configuration.incoming
+			incoming.afterResolve { resolvableDependencies ->
+				if (resolvableDependencies == incoming) {
+					def localProjectIds = project.rootProject.allprojects.collect { "${it.group}:${it.name}:${it.version}" as String } as Set
+					this.resolvedConfigurationDependencies.add(new ResolvedConfigurationDependencies(localProjectIds, configuration.resolvedConfiguration, configuration.name))
+				}
+			}
+		}
+	}
+
+	@Classpath
+	FileCollection getClasspath() {
+		return this.classpath;
+	}
+
+	void setClasspath(FileCollection classpath) {
+		this.classpath = classpath
 	}
 
 	@TaskAction
@@ -69,10 +123,13 @@ class ResolvedConfigurationDependencies {
 
 plugins {
 	id 'java'
-	id 'war'
 }
 
-tasks.register('reproducer', Reproducer) {
+tasks.register('customJar', CustomJar) {
+	classpath = sourceSets.main.runtimeClasspath
+}
+
+tasks.register('customWar', CustomWar) {
 	classpath = sourceSets.main.runtimeClasspath
 }
 
