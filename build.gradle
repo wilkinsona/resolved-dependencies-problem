@@ -1,0 +1,88 @@
+class Reproducer extends War {
+
+	private List<ResolvedConfigurationDependencies> resolvedConfigurationDependencies = new ArrayList<>()
+
+	Reproducer() {
+		Project project = getProject()
+		project.getConfigurations().all { configuration ->
+			ResolvableDependencies incoming = configuration.incoming
+			incoming.afterResolve { resolvableDependencies ->
+				if (resolvableDependencies == incoming) {
+					def localProjectIds = project.rootProject.allprojects.collect { "${it.group}:${it.name}:${it.version}" as String } as Set
+					this.resolvedConfigurationDependencies.add(new ResolvedConfigurationDependencies(localProjectIds, configuration.resolvedConfiguration, configuration.name))
+				}
+			}
+		}
+	}
+
+	@TaskAction
+	void reproduce() {
+		for (File file: classpath.files) {
+			if (file.isFile() && !find(file)) {
+				throw new GradleException("Could not find " + file)
+			}
+		}
+	}
+
+	String find(def file) {
+		for (def dependencies : resolvedConfigurationDependencies) {
+			def found = dependencies.find(file)
+			if (found) {
+				return found
+			}
+		}
+		return null
+	}
+
+	@Internal
+	List<ResolvedConfigurationDependencies> getResolvedConfigurationDependencies() {
+		return this.resolvedConfigurationDependencies
+	}
+
+}
+
+class ResolvedConfigurationDependencies {
+
+	private final Map<File, String> dependencies = new LinkedHashMap<>()
+
+	private final String configurationName
+
+	ResolvedConfigurationDependencies(Set<String> projectDependencyIds, ResolvedConfiguration resolvedConfiguration, String configurationName) {
+		if (!resolvedConfiguration.hasError()) {
+			LenientConfiguration lenientConfiguration = resolvedConfiguration.getLenientConfiguration();
+			lenientConfiguration.getFiles()
+			for (ResolvedArtifact resolvedArtifact : lenientConfiguration.artifacts) {
+				ModuleVersionIdentifier id = resolvedArtifact.moduleVersion.id
+				def idString = id.group + ":" + id.name + ":" + id.version
+				boolean projectDependency = projectDependencyIds.contains(id.group + ":" + id.name + ":" + id.version)
+				this.dependencies.put(resolvedArtifact.getFile(), "" + id + ":" + projectDependency)
+			}
+		}
+		this.configurationName = configurationName
+	}
+
+	String find(File file) {
+		return this.dependencies.get(file);
+	}
+
+}
+
+plugins {
+	id 'java'
+	id 'war'
+}
+
+tasks.register('reproducer', Reproducer) {
+	classpath = sourceSets.main.runtimeClasspath
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation project(":one")
+	implementation project(":two")
+	implementation("org.apache.commons:commons-lang3:3.9")
+	implementation("org.springframework:spring-core:5.2.5.RELEASE")
+}
